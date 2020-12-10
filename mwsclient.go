@@ -7,6 +7,7 @@
 
 package mwsclient
 
+
 import (
 	"bytes"
 	"context"
@@ -15,6 +16,7 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"sort"
@@ -23,7 +25,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/kplcloud/request"
-	"github.com/pkg/errors"
 )
 
 type RequestMethod struct {
@@ -197,7 +198,7 @@ type mwsClient struct {
 	host, authToken, accessKey, secretKey, sellerId, marketplaceId string
 }
 
-func (m *mwsClient) GetCompetitivePricingForASIN(ctx context.Context, ASINList []string) (res []GetCompetitivePricingForASINResult, err error) {
+func (m mwsClient) GetCompetitivePricingForASIN(ctx context.Context, ASINList []string) (res []GetCompetitivePricingForASINResult, err error) {
 	defer func(begin time.Time) {
 		_ = m.logger.Log(
 			m.traceId, ctx.Value(m.traceId),
@@ -223,7 +224,7 @@ func (m *mwsClient) GetCompetitivePricingForASIN(ctx context.Context, ASINList [
 	return resp.GetCompetitivePricingForASINResult, nil
 }
 
-func (m *mwsClient) GetMatchingProduct(ctx context.Context, ASINList []string) (res []GetMatchingProductResult, err error) {
+func (m mwsClient) GetMatchingProduct(ctx context.Context, ASINList []string) (res []GetMatchingProductResult, err error) {
 	defer func(begin time.Time) {
 		_ = m.logger.Log(
 			m.traceId, ctx.Value(m.traceId),
@@ -246,7 +247,7 @@ func (m *mwsClient) GetMatchingProduct(ctx context.Context, ASINList []string) (
 	return resp.GetMatchingProductResult, nil
 }
 
-func (m *mwsClient) GetMatchingProductForId(ctx context.Context, idType string, idList []string) (res []GetMatchingProductForIdResult, err error) {
+func (m mwsClient) GetMatchingProductForId(ctx context.Context, idType string, idList []string) (res []GetMatchingProductForIdResult, err error) {
 	defer func(begin time.Time) {
 		_ = m.logger.Log(
 			m.traceId, ctx.Value(m.traceId),
@@ -271,7 +272,7 @@ func (m *mwsClient) GetMatchingProductForId(ctx context.Context, idType string, 
 	return resp.GetMatchingProductForIdResult, nil
 }
 
-func (m *mwsClient) ListOrders(ctx context.Context, fromDate time.Time, allMarketplaces bool, states []OrderState,
+func (m mwsClient) ListOrders(ctx context.Context, fromDate time.Time, allMarketplaces bool, states []OrderState,
 	fulfillmentChannel []OrderChannel, till *time.Time, callFun ListOrderCallFun) (res []Order, err error) {
 	defer func(begin time.Time) {
 		_ = m.logger.Log(
@@ -326,7 +327,7 @@ func (m *mwsClient) ListOrders(ctx context.Context, fromDate time.Time, allMarke
 	return resp.ListOrdersResult.Orders.Order, nil
 }
 
-func (m *mwsClient) genAmazonUrl(ep RequestMethod, params url.Values) (finalUrl *url.URL, err error) {
+func (m mwsClient) genAmazonUrl(ep RequestMethod, params url.Values) (finalUrl *url.URL, err error) {
 	params.Add("Timestamp", time.Now().UTC().Format(time.RFC3339))
 	params.Add("AWSAccessKeyId", m.accessKey)
 	params.Add("Action", ep.Action)
@@ -357,7 +358,7 @@ func (m *mwsClient) genAmazonUrl(ep RequestMethod, params url.Values) (finalUrl 
 	return result, nil
 }
 
-func (m *mwsClient) SetClient(ctx context.Context, authToken, accessKey, secretKey, sellerId, marketplaceId string) MwsClient {
+func (m mwsClient) SetClient(ctx context.Context, authToken, accessKey, secretKey, sellerId, marketplaceId string) MwsClient {
 	m.authToken = authToken
 	m.accessKey = accessKey
 	m.secretKey = secretKey
@@ -366,7 +367,7 @@ func (m *mwsClient) SetClient(ctx context.Context, authToken, accessKey, secretK
 	return m
 }
 
-func (m *mwsClient) GetFeedSubmissionResult(ctx context.Context, feedSubmissionId string) (err error) {
+func (m mwsClient) GetFeedSubmissionResult(ctx context.Context, feedSubmissionId string) (err error) {
 	defer func(begin time.Time) {
 		_ = m.logger.Log(
 			m.traceId, ctx.Value(m.traceId),
@@ -392,7 +393,7 @@ func (m *mwsClient) GetFeedSubmissionResult(ctx context.Context, feedSubmissionI
 	return
 }
 
-func (m *mwsClient) signAmazonUrl(origUrl *url.URL, method string) (signedUrl string, err error) {
+func (m mwsClient) signAmazonUrl(origUrl *url.URL, method string) (signedUrl string, err error) {
 	escapeUrl := strings.Replace(origUrl.RawQuery, ",", "%2C", -1)
 	escapeUrl = strings.Replace(escapeUrl, ":", "%3A", -1)
 
@@ -419,7 +420,7 @@ func (m *mwsClient) signAmazonUrl(origUrl *url.URL, method string) (signedUrl st
 	return origUrl.String(), nil
 }
 
-func (m *mwsClient) request(params url.Values, ep RequestMethod, data interface{}) (err error) {
+func (m mwsClient) request(params url.Values, ep RequestMethod, data interface{}) (err error) {
 	genUrl, err := m.genAmazonUrl(ep, params)
 	if err != nil {
 		return
@@ -444,6 +445,9 @@ func (m *mwsClient) request(params url.Values, ep RequestMethod, data interface{
 		Header("Accept", "application/xml").
 		Header("x-amazon-user-agent", "MCS/MwsClient/0.0.*").
 		Do().Raw()
+
+	fmt.Println(string(b), err)
+
 	if err != nil {
 		var errResponse ErrorResponse
 		if e := xml.NewDecoder(bytes.NewBuffer(b)).Decode(&errResponse); e != nil {
@@ -463,3 +467,4 @@ func (m *mwsClient) request(params url.Values, ep RequestMethod, data interface{
 func NewMwsClient(logger log.Logger, traceId, host, authToken, accessKey, secretKey, sellerId, marketplaceId string) MwsClient {
 	return &mwsClient{logger: logger, traceId: traceId, host: "mws.amazonservices.com"}
 }
+
